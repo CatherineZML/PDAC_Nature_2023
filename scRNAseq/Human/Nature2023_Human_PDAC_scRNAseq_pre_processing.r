@@ -42,16 +42,16 @@ Sample.data <- Read10X("GSM6727547/filtered_feature_bc_matrix")
 Sample_48_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "PDAC_48_tumor")
 
 Sample.data <- Read10X("GSM6727543/filtered_feature_bc_matrix/")
-Sample_25_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_25_Tumor")
+Sample_25_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_25_tumor")
 
 Sample.data <- Read10X("GSM6727551/filtered_feature_bc_matrix/")
-Sample_60_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "PDAC_60_Tumor")
+Sample_60_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "PDAC_60_tumor")
 
 Sample.data <- Read10X("GSM6727544/filtered_feature_bc_matrix/")
-Sample_26_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_26_Tumor")
+Sample_26_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_26_tumor")
 
 Sample.data <- Read10X("GSM6727542/filtered_feature_bc_matrix/")
-Sample_15_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_15_Tumor")
+Sample_15_tumor <- CreateSeuratObject(Sample.data, min.cells = 3,  project = "LPDAC_15_tumor")
 
 #merge samples
 Sample.merge<- merge(Sample_30_tumor, y = c(Sample_50_tumor,  Sample_51_tumor, Sample_55_tumor, Sample_47_tumor,Sample_60_tumor, Sample_48_tumor, Sample_25_tumor, Sample_26_tumor, Sample_15_tumor), add.cell.ids = c("LPDAC_30_tumor", "PDAC_50_tumor", "PDAC_51_tumor", "PDAC_55_tumor", "PDAC_47_tumor","PDAC_60_tumor", "PDAC_48_tumor", "LPDAC_25_tumor", "LPDAC_26_tumor", "LPDAC_15_tumor"), project = "humanPDAC")
@@ -102,3 +102,13 @@ ribo.genes.expr <- grep("^RPL", rownames(Sample.merge@assays$RNA@counts), value 
 keep_genes = rownames(Sample.merge@assays$RNA@counts)
 keep_genes = keep_genes[!(keep_genes %in% c(mito.genes.expr,ribo.genes.expr))]
 Sample.merge <- subset(Sample.merge, features = keep_genes)
+
+#upload data from .rds objects
+counts <- readRDS("counts.RDS")
+meta.data <- readRDS("metadata.RDS")
+Sample.merge <- CreateSeuratObject(counts)
+Sample.merge <- AddMetaData(Sample.merge, meta.data)
+umap_data <- Sample.merge@meta.data[,c("UMAP_1_allCells","UMAP_2_allCells")]
+colnames(umap_data) <- c("UMAP_1", "UMAP_2")
+Sample.merge[['umap']] <- CreateDimReducObject(embeddings = as.matrix(umap_data), key = "UMAP_", global = T, assay = "RNA")
+

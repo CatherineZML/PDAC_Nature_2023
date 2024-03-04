@@ -11,11 +11,16 @@ library(org.Mm.eg.db)
 library(msigdbr)
 set.seed(123)
 
+readRDS('KPC_timecourse_counts.rds')
+readRDS('KPC_timecourse_metadata.rds') # metadata contains embedding coordinates and cluster ids to reproduce figures
 
 #### ALL CELLS ####
 
+Sample_expr <- CreateSeuratObject(counts, min_cells = 0, meta.data = metadata)
+
 Sample_expr <- NormalizeData(Sample_expr, normalization.method = "LogNormalize", scale.factor = 1e4, assay='RNA')
-Sample_expr_FastMNN <- RunFastMNN(object.list = SplitObject(Sample_expr, split.by = "orig.ident"))
+Sample_expr_FastMNN <- FindVariableFeatures(Sample_expr,selection.method = "vst", nfeatures = 3000)
+Sample_expr_FastMNN <- RunFastMNN(object.list = SplitObject(Sample_expr_FastMNN, split.by = "orig.ident"))
 Sample_expr_FastMNN <- RunUMAP(Sample_expr_FastMNN, reduction='mnn', dims = 1:20)
 Sample_expr_FastMNN <- FindNeighbors(Sample_expr_FastMNN, reduction = 'mnn', dims = 1:20)
 Sample_expr_FastMNN <- FindClusters(Sample_expr_FastMNN, resolution = c(0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.5))
@@ -31,7 +36,7 @@ while(i<=23){
 
 #### MONONUCLEAR PHAGOCYTES ####
 
-Sample_expr_MP <- subset(Sample_expr, subset = Annotation_2 == 'MNPs')
+Sample_expr_MP <- subset(Sample_expr, subset = MNPs_refined == 'MNPs')
 
 Sample_expr_MP <- NormalizeData(Sample_expr_MP, normalization.method = "LogNormalize", scale.factor = 1e4, assay='RNA')
 Sample_expr_MP <- FindVariableFeatures(Sample_expr_MP,selection.method = "vst", nfeatures = 3000)
@@ -53,7 +58,7 @@ while(i<=15){
   
 #### TUMOR-ASSOCIATED MACROPHAGES ####
 
-Sample_expr_TAM <- subset(Sample_expr, subset = Annotation_3 == 'TAMs')
+Sample_expr_TAM <- subset(Sample_expr, subset = Macro_refined == 'Macrophage')
 
 Sample_expr_TAM <- NormalizeData(Sample_expr_TAM, normalization.method = "LogNormalize", scale.factor = 1e4, assay='RNA')
 Sample_expr_TAM <- FindVariableFeatures(Sample_expr_TAM,selection.method = "vst", nfeatures = 3000)
@@ -64,12 +69,12 @@ Sample_expr_TAM <- RunUMAP(Sample_expr_TAM, reduction='harmony', dims = 1:20)
 Sample_expr_TAM <- FindNeighbors(Sample_expr_TAM, reduction = 'harmony', dims = 1:20)
 Sample_expr_TAM <- FindClusters(Sample_expr_TAM, resolution = c(0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.5))
 
-Idents(Sample_expr_MP) <- 'RNA_snn_res.1'
+Idents(Sample_expr_TAM) <- 'RNA_snn_res.0.4'
 i <- 0
-while(i<=15){
-  eval(parse(text=(paste("cluster",i,".markers1 <- FindMarkers(Sample_expr_MP, ident.1 =",i,", min.pct=0.1, only.pos = TRUE, pseudocount.use = 0.1, logfc_threshold = 1, assay = 'RNA')", sep=""))))
-  eval(parse(text=(paste("cluster",i,".markers1 <- cluster",i,".markers1[order(cluster",i,".markers1$avg_log2FC, decreasing = TRUE),]", sep=""))))
-  eval(parse(text=(paste("write.table(cluster",i,".markers1, 'MarkerGenes_in_Cluster",i,"_res1.txt', sep='\t', quote=F, col.names=T, row.names=T)", sep=""))))
+while(i<=6){
+  eval(parse(text=(paste("cluster",i,".markers0.4 <- FindMarkers(Sample_expr_TAM, ident.1 =",i,", min.pct=0.1, only.pos = TRUE, pseudocount.use = 0.1, logfc_threshold = 1, assay = 'RNA')", sep=""))))
+  eval(parse(text=(paste("cluster",i,".markers0.4 <- cluster",i,".markers0.4[order(cluster",i,".markers0.4$avg_log2FC, decreasing = TRUE),]", sep=""))))
+  eval(parse(text=(paste("write.table(cluster",i,".markers0.4, 'MarkerGenes_in_Cluster",i,"_res1.txt', sep='\t', quote=F, col.names=T, row.names=T)", sep=""))))
   print(paste("Evaluated the markers' significance of cluster n.",i))
   i<-i+1}
   
@@ -84,30 +89,51 @@ Sample_expr_TAM$TAM_Annotation <- TAM_annotation
 
 #### MONOCYTES AND MACROPHAGES ####
 
+readRDS('MonoMacro_KPC_timecourse_counts.rds')
+readRDS('MonoMacro_KPC_timecourse_metadata.rds') # metadata contains embedding coordinates and cluster ids to reproduce figures
+
+Sample_merge_MonoMacro <- CreateSeuratObject(counts, min_cells = 0, meta.data = metadata)
+
 Sample_merge_MonoMacro <- NormalizeData(Sample_merge_MonoMacro, normalization.method = "LogNormalize", scale.factor = 1e4, assay='RNA')
+Sample_merge_MonoMacro <- FindVariableFeatures(Sample_merge_MonoMacro,selection.method = "vst", nfeatures = 3000)
 Sample_merge_MonoMacro <- RunFastMNN(object.list = SplitObject(Sample_merge_MonoMacro, split.by = "orig.ident"))
-palantir_so<-RunPalantirDiffusionMap(Sample_merge_MonoMacro_subset, reduction = "mnn", n_components = 20)
-Sample_merge_MonoMacro_subset[["tsne_mnn"]] <-
+palantir_so<-RunPalantirDiffusionMap(Sample_merge_MonoMacro, reduction = "mnn", n_components = 20)
+Sample_merge_MonoMacro[["tsne_mnn"]] <-
     read.csv("tmp/tsne.csv", row.names = 1) %>%
     set_colnames(paste0("TSNE_FASTMNN_", 1:ncol(.))) %>%
     as.matrix() %>%
-    CreateDimReducObject(key = "TSNEFASTMNN_", assay = DefaultAssay(Sample_merge_MonoMacro_subset))
+    CreateDimReducObject(key = "TSNEFASTMNN_", assay = DefaultAssay(Sample_merge_MonoMacro))
 
 ## prepare annotations for velocity and Cellrank analysis
 
-annotated_clusters <- as.data.frame(Sample_merge_MonoMacro_subset$Annotation)
+annotated_clusters <- as.data.frame(Sample_merge_MonoMacro$Annotation)
 colnames(annotated_clusters) <- 'clusters_refined'
 write.csv(annotated_clusters, file='annotated_clusters.csv')
+
+embedding_coord <- Sample_merge_MonoMacro@meta.data[,c('MonoMacro_TSNE_1','MonoMacro_TSNE_2')]
+colnames(embedding_coord)<-c('x','y')
+write.csv(embedding_coord, file='tsne.csv')
 
 ### run python notebook scripts for velocity analysis + Cellrank
 
 ## prepare data for optimal transport analysis
+cell_day <- data.frame(id=rownames(Sample_merge_MonoMacro@meta.data),day=ifelse(Sample_merge_MonoMacro$orig.ident=='Tumor_d10',10,
+                                                                                ifelse(Sample_merge_MonoMacro$orig.ident=='Tumor_d20',20,
+                                                                                       ifelse(Sample_merge_MonoMacro$orig.ident=='Tumor_d30',30,0))))
+write.table(cell_day, 'cell_day.txt', sep='\t', quote=F, col.names=T, row.names=F)
+
+embedding_coord <- Sample_merge_MonoMacro@meta.data[,c('cell_id','MonoMacro_TSNE_1','MonoMacro_TSNE_2')]
+colnames(embedding_coord)<-c('id','x','y')
+write.table(embedding_coord, 'embedding_coord.txt', sep='\t', quote=F, col.names=T, row.names=F)
+
+SaveH5Seurat(counts, filename = "matrix_MM.h5Seurat")
+Convert("matrix_MM.h5Seurat", dest = "h5ad")
 
 ### run WOT scripts for optimal transport analysis
 
 #### EPITHELIAL AND TUMOR CELLS ####
 
-Sample_expr_Epithelial <- subset(Sample_expr, subset = Annotation_2 == 'Epithelial_cells')
+Sample_expr_Epithelial <- subset(Sample_expr, subset = Epithelial_refined == 'Epithelial_cells')
 
 Sample_expr_Epithelial <- NormalizeData(Sample_expr_Epithelial, normalization.method = "LogNormalize", scale.factor = 1e4, assay='RNA')
 Sample_expr_Epithelial <- FindVariableFeatures(Sample_expr_Epithelial,selection.method = "vst", nfeatures = 3000)
